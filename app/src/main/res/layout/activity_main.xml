@@ -2,8 +2,11 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/gameLayout"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="@drawable/sky_background">
+    android:layout_height="match_parent">
+
+    <com.ally.bubblepop.SkyView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
 
     <!-- Corner touch zones for unlock sequence -->
     <View
