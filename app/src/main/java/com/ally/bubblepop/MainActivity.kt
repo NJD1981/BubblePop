@@ -35,6 +35,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private val numbers = listOf("One", "Two", "Three", "Four", "Five")
     private var bubblesPopped = 0
     private val activeBubbles = mutableListOf<View>()
+    private val soundManager = SoundManager()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -158,6 +159,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         bubble.setOnClickListener(null)
 
         speak(numbers[index])
+        soundManager.playPop(index)
         bubblesPopped++
 
         val sx = ObjectAnimator.ofFloat(bubble, "scaleX", 1f, 1.9f, 0f)
