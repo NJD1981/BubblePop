@@ -1,20 +1,59 @@
 package com.ally.bubblepop
 
 import android.os.Bundle
-import androidx.activity.enableEdgeToEdge
+import android.view.View
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
 
 class MainActivity : AppCompatActivity() {
+
+    private val unlockSequence = listOf("TL", "TR", "BR", "BL")
+    private val currentSequence = mutableListOf<String>()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
         setContentView(R.layout.activity_main)
-        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main)) { v, insets ->
-            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
-            insets
+        enableKioskMode()
+        disableBackButton()
+    }
+
+    private fun enableKioskMode() {
+        window.decorView.systemUiVisibility = (
+                View.SYSTEM_UI_FLAG_FULLSCREEN or
+                        View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+                        View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
+                        View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
+                        View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
+                        View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                )
+    }
+
+    private fun disableBackButton() {
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                // Back button disabled for kiosk mode
+            }
+        })
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) enableKioskMode()
+    }
+
+    fun onCornerTouch(corner: String) {
+        if (unlockSequence[currentSequence.size] == corner) {
+            currentSequence.add(corner)
+            if (currentSequence.size == unlockSequence.size) {
+                currentSequence.clear()
+                showPinDialog()
+            }
+        } else {
+            currentSequence.clear()
         }
+    }
+
+    private fun showPinDialog() {
+        // PIN dialog will go here
     }
 }
