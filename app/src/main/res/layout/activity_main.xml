@@ -3,7 +3,7 @@
     android:id="@+id/gameLayout"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#FFF0F5">
+    android:background="@drawable/sky_background">
 
     <!-- Corner touch zones for unlock sequence -->
     <View
