@@ -97,6 +97,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                         View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
                         View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
                 )
+        try { startLockTask() } catch (e: Exception) { }
     }
 
     private fun disableBackButton() {
@@ -113,6 +114,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     override fun onResume() {
         super.onResume()
         enableKioskMode()
+        try { startLockTask() } catch (e: Exception) { }
     }
 
     private fun setupUnlockDot() {
@@ -383,6 +385,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         overlay.setOnClickListener {
             root.removeView(overlay)
             if (fromUnlock) {
+                try { stopLockTask() } catch (e: Exception) { }
                 finish()
             } else {
                 cycleCount = 0
