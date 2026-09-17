@@ -55,7 +55,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     )
     private val colorNames = listOf("Pink", "Blue", "Green", "Yellow", "Purple")
     private val numbers = listOf("One", "Two", "Three", "Four", "Five")
-    private val bubbleSizes = listOf(100, 140, 110, 165, 125)
+    private val bubbleSizes = listOf(100, 150, 115, 190, 135)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -132,16 +132,13 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
             zone.setOnClickListener {
                 val now = System.currentTimeMillis()
-
                 if (now - lastTapTime > tapTimeout && unlockStep > 0) {
                     unlockStep = 0
                     moveDot(0)
                     lastTapTime = now
                     return@setOnClickListener
                 }
-
                 lastTapTime = now
-
                 if (requiredStep == unlockStep) {
                     unlockStep++
                     if (unlockStep >= 4) {
@@ -169,9 +166,13 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     override fun onInit(status: Int) {
         if (status == TextToSpeech.SUCCESS) {
-            tts.language = Locale.UK
-            tts.setSpeechRate(0.82f)
-            tts.setPitch(1.2f)
+            tts.language = Locale.US
+            tts.setSpeechRate(0.85f)
+            tts.setPitch(1.4f)
+            val femaleVoice = tts.voices?.firstOrNull {
+                it.locale == Locale.US && it.name.contains("female", ignoreCase = true)
+            } ?: tts.voices?.firstOrNull { it.locale == Locale.US }
+            femaleVoice?.let { tts.voice = it }
         }
     }
 
@@ -189,7 +190,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
         for (i in 0 until 5) {
             handler.postDelayed({
-                val size = dpToPx(bubbleSizes[i])
+                val sizeDp = bubbleSizes[i]
+                val size = dpToPx(sizeDp)
                 val colorIdx = i % bubbleColors.size
 
                 val label = when (currentRound) {
@@ -236,18 +238,20 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     start()
                 }
 
-                bubble.setOnClickListener { onBubblePop(bubble, i) }
+                bubble.setOnClickListener { onBubblePop(bubble, i, sizeDp) }
 
             }, (i * 1600L / roundSpeed).toLong())
         }
     }
 
-    private fun onBubblePop(bubble: View, index: Int) {
+    private fun onBubblePop(bubble: View, index: Int, sizeDp: Int) {
         if (bubble.tag == "popped") return
         bubble.tag = "popped"
         bubble.setOnClickListener(null)
 
-        soundManager.playPop(index)
+        val sortedSizes = bubbleSizes.sorted()
+        val soundIndex = sortedSizes.indexOf(sizeDp).coerceIn(0, 4)
+        soundManager.playPop(soundIndex)
 
         handler.postDelayed({
             when (currentRound) {
