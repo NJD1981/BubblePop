@@ -27,13 +27,21 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private val handler = Handler(Looper.getMainLooper())
     private lateinit var soundManager: SoundManager
 
-    enum class RoundType { PLAIN, COLOUR, NUMBER }
+    enum class RoundType { PLAIN, NUMBER, COLOUR }
     private var currentRound = RoundType.PLAIN
     private var cycleCount = 0
-    private val maxCycles = 3
+    private val maxCycles = 5
     private var roundSpeed = 1.0f
     private var bubblesPopped = 0
     private var roundInProgress = false
+
+    data class BubbleData(
+        val view: BubbleView,
+        val index: Int,
+        val sizeDp: Int,
+        var popped: Boolean = false
+    )
+    private val activeBubbles = mutableListOf<BubbleData>()
 
     private lateinit var unlockDot: View
     private var unlockStep = 0
@@ -184,79 +192,127 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         if (roundInProgress) return
         roundInProgress = true
         bubblesPopped = 0
+        activeBubbles.clear()
 
         val sw = root.width.toFloat()
         val sh = root.height.toFloat()
 
         for (i in 0 until 5) {
             handler.postDelayed({
-                val sizeDp = bubbleSizes[i]
-                val size = dpToPx(sizeDp)
-                val colorIdx = i % bubbleColors.size
-
-                val label = when (currentRound) {
-                    RoundType.NUMBER -> (i + 1).toString()
-                    else -> ""
-                }
-
-                val bubble = BubbleView(
-                    this,
-                    bubbleColors[colorIdx][0],
-                    bubbleColors[colorIdx][1],
-                    label,
-                    currentRound == RoundType.NUMBER
-                )
-
-                val lp = FrameLayout.LayoutParams(size, size)
-                lp.leftMargin = (Random.nextFloat() * (sw - size - 40) + 20).toInt()
-                lp.topMargin = sh.toInt()
-                root.addView(bubble, lp)
-
-                val baseDuration = 9000 + Random.nextLong(3000)
-                val duration = (baseDuration / roundSpeed).toLong()
-
-                val rise = ObjectAnimator.ofFloat(bubble, "translationY", 0f, -(sh + size))
-                rise.duration = duration
-                rise.interpolator = android.view.animation.LinearInterpolator()
-                rise.addListener(object : AnimatorListenerAdapter() {
-                    override fun onAnimationEnd(animation: Animator) {
-                        if (root.indexOfChild(bubble) >= 0) root.removeView(bubble)
-                    }
-                })
-
-                val wobble = ValueAnimator.ofFloat(1f, 1.05f, 0.96f, 1.04f, 1f)
-                wobble.duration = 1600
-                wobble.repeatCount = ValueAnimator.INFINITE
-                wobble.addUpdateListener {
-                    val v = it.animatedValue as Float
-                    bubble.scaleX = v
-                    bubble.scaleY = 1f + (1f - v) * 0.5f
-                }
-
-                AnimatorSet().apply {
-                    playTogether(rise, wobble)
-                    start()
-                }
-
-                bubble.setOnClickListener { onBubblePop(bubble, i, sizeDp) }
-
-            }, (i * 1600L / roundSpeed).toLong())
+                launchBubble(i, sw, sh)
+            }, (i * 1200L / roundSpeed).toLong())
         }
     }
 
-    private fun onBubblePop(bubble: View, index: Int, sizeDp: Int) {
-        if (bubble.tag == "popped") return
-        bubble.tag = "popped"
+    private fun launchBubble(index: Int, sw: Float, sh: Float) {
+        val sizeDp = bubbleSizes[index]
+        val size = dpToPx(sizeDp)
+        val colorIdx = index % bubbleColors.size
+
+        val label = when (currentRound) {
+            RoundType.NUMBER -> (index + 1).toString()
+            else -> ""
+        }
+
+        val bubble = BubbleView(
+            this,
+            bubbleColors[colorIdx][0],
+            bubbleColors[colorIdx][1],
+            label,
+            currentRound == RoundType.NUMBER
+        )
+
+        val lp = FrameLayout.LayoutParams(size, size)
+
+        val entryType = Random.nextFloat()
+        val startX: Float
+        val startY: Float
+        val endX: Float
+        val endY: Float
+
+        when {
+            entryType < 0.6f -> {
+                startX = Random.nextFloat() * (sw - size - 40) + 20
+                startY = sh + size
+                endX = startX + (Random.nextFloat() - 0.5f) * 200f
+                endY = -(size.toFloat() + 100)
+            }
+            entryType < 0.8f -> {
+                startX = -size.toFloat()
+                startY = Random.nextFloat() * sh * 0.6f + sh * 0.1f
+                endX = sw + size
+                endY = startY - Random.nextFloat() * sh * 0.4f
+            }
+            else -> {
+                startX = sw + size
+                startY = Random.nextFloat() * sh * 0.6f + sh * 0.1f
+                endX = -size.toFloat()
+                endY = startY - Random.nextFloat() * sh * 0.4f
+            }
+        }
+
+        lp.leftMargin = startX.toInt()
+        lp.topMargin = startY.toInt()
+        root.addView(bubble, lp)
+
+        val bubbleData = BubbleData(bubble, index, sizeDp)
+        activeBubbles.add(bubbleData)
+
+        val baseDuration = (9000 + Random.nextLong(3000))
+        val duration = (baseDuration / roundSpeed).toLong()
+
+        val moveX = ObjectAnimator.ofFloat(bubble, "translationX", 0f, endX - startX)
+        val moveY = ObjectAnimator.ofFloat(bubble, "translationY", 0f, endY - startY)
+        moveX.duration = duration
+        moveY.duration = duration
+        moveX.interpolator = android.view.animation.LinearInterpolator()
+        moveY.interpolator = android.view.animation.LinearInterpolator()
+
+        moveX.addListener(object : AnimatorListenerAdapter() {
+            override fun onAnimationEnd(animation: Animator) {
+                if (!bubbleData.popped) {
+                    if (root.indexOfChild(bubble) >= 0) root.removeView(bubble)
+                    activeBubbles.remove(bubbleData)
+                    handler.postDelayed({
+                        if (roundInProgress) launchBubble(index, sw, sh)
+                    }, 500)
+                } else {
+                    if (root.indexOfChild(bubble) >= 0) root.removeView(bubble)
+                }
+            }
+        })
+
+        val wobble = ValueAnimator.ofFloat(1f, 1.05f, 0.96f, 1.04f, 1f)
+        wobble.duration = 1600
+        wobble.repeatCount = ValueAnimator.INFINITE
+        wobble.addUpdateListener {
+            val v = it.animatedValue as Float
+            bubble.scaleX = v
+            bubble.scaleY = 1f + (1f - v) * 0.5f
+        }
+
+        AnimatorSet().apply {
+            playTogether(moveX, moveY, wobble)
+            start()
+        }
+
+        bubble.setOnClickListener { onBubblePop(bubbleData) }
+    }
+
+    private fun onBubblePop(bubbleData: BubbleData) {
+        if (bubbleData.popped) return
+        bubbleData.popped = true
+        val bubble = bubbleData.view
         bubble.setOnClickListener(null)
 
         val sortedSizes = bubbleSizes.sorted()
-        val soundIndex = sortedSizes.indexOf(sizeDp).coerceIn(0, 4)
+        val soundIndex = sortedSizes.indexOf(bubbleData.sizeDp).coerceIn(0, 4)
         soundManager.playPop(soundIndex)
 
         handler.postDelayed({
             when (currentRound) {
-                RoundType.NUMBER -> speak(numbers[index])
-                RoundType.COLOUR -> speak(colorNames[index % colorNames.size])
+                RoundType.NUMBER -> speak(numbers[bubbleData.index])
+                RoundType.COLOUR -> speak(colorNames[bubbleData.index % colorNames.size])
                 RoundType.PLAIN -> {}
             }
         }, 320L)
@@ -271,6 +327,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             addListener(object : AnimatorListenerAdapter() {
                 override fun onAnimationEnd(animation: Animator) {
                     if (root.indexOfChild(bubble) >= 0) root.removeView(bubble)
+                    activeBubbles.remove(bubbleData)
                     bubblesPopped++
                     if (bubblesPopped >= 5) {
                         roundInProgress = false
@@ -284,15 +341,15 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private fun nextRound() {
         currentRound = when (currentRound) {
-            RoundType.PLAIN -> RoundType.COLOUR
-            RoundType.COLOUR -> RoundType.NUMBER
-            RoundType.NUMBER -> {
+            RoundType.PLAIN -> RoundType.NUMBER
+            RoundType.NUMBER -> RoundType.COLOUR
+            RoundType.COLOUR -> {
                 cycleCount++
                 if (cycleCount >= maxCycles) {
                     showRestartScreen(fromUnlock = false)
                     return
                 }
-                roundSpeed += 0.4f
+                roundSpeed += 0.6f
                 RoundType.PLAIN
             }
         }
@@ -332,6 +389,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 roundSpeed = 1.0f
                 currentRound = RoundType.PLAIN
                 roundInProgress = false
+                activeBubbles.clear()
                 spawnBubbles()
             }
         }
