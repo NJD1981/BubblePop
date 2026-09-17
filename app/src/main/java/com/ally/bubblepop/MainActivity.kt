@@ -5,8 +5,6 @@ import android.animation.AnimatorListenerAdapter
 import android.animation.AnimatorSet
 import android.animation.ObjectAnimator
 import android.animation.ValueAnimator
-import android.app.ActivityManager
-import android.content.Context
 import android.graphics.Color
 import android.os.Bundle
 import android.os.Handler
@@ -27,6 +25,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private lateinit var tts: TextToSpeech
     private lateinit var root: FrameLayout
     private val handler = Handler(Looper.getMainLooper())
+    private lateinit var soundManager: SoundManager
 
     enum class RoundType { PLAIN, COLOUR, NUMBER }
     private var currentRound = RoundType.PLAIN
@@ -34,17 +33,18 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private val maxCycles = 3
     private var roundSpeed = 1.0f
     private var bubblesPopped = 0
+    private var roundInProgress = false
 
     private var unlockStep = 0
     private lateinit var unlockDot: View
+    private var lastTapTime = 0L
+    private val tapTimeout = 2000L
     private val unlockPositions = listOf(
         Gravity.TOP or Gravity.START,
         Gravity.TOP or Gravity.END,
         Gravity.BOTTOM or Gravity.END,
         Gravity.BOTTOM or Gravity.START
     )
-    private var lastTapTime = 0L
-    private val tapTimeout = 2000L
 
     private val bubbleColors = listOf(
         intArrayOf(0xFFFFB3C6.toInt(), 0xFF8B2244.toInt()),
@@ -55,9 +55,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     )
     private val colorNames = listOf("Pink", "Blue", "Green", "Yellow", "Purple")
     private val numbers = listOf("One", "Two", "Three", "Four", "Five")
-    private val bubbleSizes = listOf(100, 130, 110, 160, 120)
-
-    private lateinit var soundManager: SoundManager
+    private val bubbleSizes = listOf(100, 140, 110, 165, 125)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -107,7 +105,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     override fun onResume() {
         super.onResume()
         enableKioskMode()
-        try { startLockTask() } catch (e: Exception) { }
     }
 
     private fun setupUnlockDot() {
@@ -121,12 +118,24 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
         unlockDot.setOnClickListener {
             val now = System.currentTimeMillis()
-            if (now - lastTapTime > tapTimeout) unlockStep = 0
+
+            if (now - lastTapTime > tapTimeout && unlockStep > 0) {
+                unlockStep = 0
+                val lp = unlockDot.layoutParams as FrameLayout.LayoutParams
+                lp.gravity = unlockPositions[0]
+                unlockDot.layoutParams = lp
+                lastTapTime = now
+                return@setOnClickListener
+            }
+
             lastTapTime = now
             unlockStep++
 
             if (unlockStep >= unlockPositions.size) {
                 unlockStep = 0
+                val lp = unlockDot.layoutParams as FrameLayout.LayoutParams
+                lp.gravity = unlockPositions[0]
+                unlockDot.layoutParams = lp
                 showRestartScreen(fromUnlock = true)
             } else {
                 val lp = unlockDot.layoutParams as FrameLayout.LayoutParams
@@ -151,9 +160,12 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun spawnBubbles() {
+        if (roundInProgress) return
+        roundInProgress = true
+        bubblesPopped = 0
+
         val sw = root.width.toFloat()
         val sh = root.height.toFloat()
-        bubblesPopped = 0
 
         for (i in 0 until 5) {
             handler.postDelayed({
@@ -191,17 +203,17 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     }
                 })
 
-                val wobbleX = ValueAnimator.ofFloat(1f, 1.05f, 0.96f, 1.04f, 1f)
-                wobbleX.duration = 1600
-                wobbleX.repeatCount = ValueAnimator.INFINITE
-                wobbleX.addUpdateListener {
+                val wobble = ValueAnimator.ofFloat(1f, 1.05f, 0.96f, 1.04f, 1f)
+                wobble.duration = 1600
+                wobble.repeatCount = ValueAnimator.INFINITE
+                wobble.addUpdateListener {
                     val v = it.animatedValue as Float
                     bubble.scaleX = v
                     bubble.scaleY = 1f + (1f - v) * 0.5f
                 }
 
                 AnimatorSet().apply {
-                    playTogether(rise, wobbleX)
+                    playTogether(rise, wobble)
                     start()
                 }
 
@@ -215,7 +227,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         if (bubble.tag == "popped") return
         bubble.tag = "popped"
         bubble.setOnClickListener(null)
-        bubblesPopped++
 
         soundManager.playPop(index)
 
@@ -223,7 +234,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             when (currentRound) {
                 RoundType.NUMBER -> speak(numbers[index])
                 RoundType.COLOUR -> speak(colorNames[index % colorNames.size])
-                RoundType.PLAIN -> { }
+                RoundType.PLAIN -> {}
             }
         }, 320L)
 
@@ -237,8 +248,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             addListener(object : AnimatorListenerAdapter() {
                 override fun onAnimationEnd(animation: Animator) {
                     if (root.indexOfChild(bubble) >= 0) root.removeView(bubble)
+                    bubblesPopped++
                     if (bubblesPopped >= 5) {
-                        handler.postDelayed({ nextRound() }, 800)
+                        roundInProgress = false
+                        handler.postDelayed({ nextRound() }, 1000)
                     }
                 }
             })
@@ -266,18 +279,21 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private fun showRestartScreen(fromUnlock: Boolean) {
         val overlay = FrameLayout(this)
         overlay.setBackgroundColor(Color.argb(220, 135, 206, 235))
+        overlay.elevation = 999f
 
         val msg = TextView(this)
-        msg.text = if (fromUnlock) "Unlocked! 🔓" else "Great job! 🎉\nTap to play again!"
+        msg.text = if (fromUnlock) "Unlocked! 🔓\nTap to exit" else "Great job! 🎉\nTap to play again!"
         msg.textSize = 42f
         msg.setTextColor(Color.WHITE)
         msg.gravity = Gravity.CENTER
         msg.typeface = android.graphics.Typeface.DEFAULT_BOLD
 
-        overlay.addView(msg, FrameLayout.LayoutParams(
+        val lp = FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT,
             FrameLayout.LayoutParams.MATCH_PARENT
-        ).also { it.gravity = Gravity.CENTER })
+        )
+        lp.gravity = Gravity.CENTER
+        overlay.addView(msg, lp)
 
         root.addView(overlay, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT,
@@ -287,12 +303,12 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         overlay.setOnClickListener {
             root.removeView(overlay)
             if (fromUnlock) {
-                try { stopLockTask() } catch (e: Exception) { }
                 finish()
             } else {
                 cycleCount = 0
                 roundSpeed = 1.0f
                 currentRound = RoundType.PLAIN
+                roundInProgress = false
                 spawnBubbles()
             }
         }
