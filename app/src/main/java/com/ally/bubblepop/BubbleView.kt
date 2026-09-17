@@ -4,7 +4,13 @@ import android.content.Context
 import android.graphics.*
 import android.view.View
 
-class BubbleView(context: Context, private val bubbleColor: Int, private val textColor: Int, private val label: String) : View(context) {
+class BubbleView(
+    context: Context,
+    private val bubbleColor: Int,
+    private val textColor: Int,
+    private val label: String,
+    private val showLabel: Boolean = true
+) : View(context) {
 
     private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val rimPaint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -14,53 +20,44 @@ class BubbleView(context: Context, private val bubbleColor: Int, private val tex
     private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG)
 
-    private val bubblePath = Path()
-
     override fun onDraw(canvas: Canvas) {
         val w = width.toFloat()
         val h = height.toFloat()
         val cx = w / 2f
         val cy = h / 2f
-        val rx = w * 0.46f
-        val ry = h * 0.46f
-
-        bubblePath.reset()
-        val pts = 8
-        val angleStep = (2 * Math.PI / pts).toFloat()
-        val wobble = floatArrayOf(1.0f, 1.06f, 0.97f, 1.04f, 0.98f, 1.05f, 0.96f, 1.03f)
-        for (i in 0..pts) {
-            val idx = i % pts
-            val angle = idx * angleStep - (Math.PI / 2).toFloat()
-            val px = cx + rx * wobble[idx] * Math.cos(angle.toDouble()).toFloat()
-            val py = cy + ry * wobble[(idx + 2) % pts] * Math.sin(angle.toDouble()).toFloat()
-            if (i == 0) bubblePath.moveTo(px, py) else bubblePath.lineTo(px, py)
-        }
-        bubblePath.close()
+        val r = minOf(w, h) * 0.44f
 
         fillPaint.shader = RadialGradient(
-            cx * 0.65f, cy * 0.6f, w * 0.75f,
+            cx * 0.65f, cy * 0.6f, r * 1.4f,
             intArrayOf(
-                Color.argb(240, Color.red(bubbleColor) + 60, Color.green(bubbleColor) + 60, Color.blue(bubbleColor) + 60),
+                Color.argb(240,
+                    (Color.red(bubbleColor) + 60).coerceAtMost(255),
+                    (Color.green(bubbleColor) + 60).coerceAtMost(255),
+                    (Color.blue(bubbleColor) + 60).coerceAtMost(255)),
                 Color.argb(140, Color.red(bubbleColor), Color.green(bubbleColor), Color.blue(bubbleColor)),
-                Color.argb(60, Color.red(bubbleColor) - 30, Color.green(bubbleColor) - 30, Color.blue(bubbleColor) - 30)
+                Color.argb(60,
+                    (Color.red(bubbleColor) - 30).coerceAtLeast(0),
+                    (Color.green(bubbleColor) - 30).coerceAtLeast(0),
+                    (Color.blue(bubbleColor) - 30).coerceAtLeast(0))
             ),
             floatArrayOf(0f, 0.5f, 1f),
             Shader.TileMode.CLAMP
         )
-        canvas.drawPath(bubblePath, fillPaint)
+        canvas.drawCircle(cx, cy, r, fillPaint)
 
         rimPaint.shader = RadialGradient(
-            cx, cy, w * 0.5f,
-            intArrayOf(Color.TRANSPARENT, Color.argb(100, Color.red(bubbleColor), Color.green(bubbleColor), Color.blue(bubbleColor))),
+            cx, cy, r,
+            intArrayOf(Color.TRANSPARENT,
+                Color.argb(100, Color.red(bubbleColor), Color.green(bubbleColor), Color.blue(bubbleColor))),
             floatArrayOf(0.72f, 1f),
             Shader.TileMode.CLAMP
         )
-        canvas.drawPath(bubblePath, rimPaint)
+        canvas.drawCircle(cx, cy, r, rimPaint)
 
         borderPaint.style = Paint.Style.STROKE
         borderPaint.strokeWidth = 2.5f
         borderPaint.color = Color.argb(180, 255, 255, 255)
-        canvas.drawPath(bubblePath, borderPaint)
+        canvas.drawCircle(cx, cy, r, borderPaint)
 
         shinePaint.color = Color.argb(190, 255, 255, 255)
         canvas.save()
@@ -77,11 +74,13 @@ class BubbleView(context: Context, private val bubbleColor: Int, private val tex
         glowPaint.color = Color.argb(70, 255, 255, 255)
         canvas.drawCircle(cx * 1.25f, cy * 1.55f, w * 0.07f, glowPaint)
 
-        textPaint.color = Color.argb(200, Color.red(textColor), Color.green(textColor), Color.blue(textColor))
-        textPaint.textSize = w * 0.38f
-        textPaint.textAlign = Paint.Align.CENTER
-        textPaint.typeface = Typeface.DEFAULT_BOLD
-        val textY = cy - (textPaint.descent() + textPaint.ascent()) / 2
-        canvas.drawText(label, cx, textY, textPaint)
+        if (showLabel && label.isNotEmpty()) {
+            textPaint.color = Color.argb(200, Color.red(textColor), Color.green(textColor), Color.blue(textColor))
+            textPaint.textSize = r * 0.75f
+            textPaint.textAlign = Paint.Align.CENTER
+            textPaint.typeface = Typeface.DEFAULT_BOLD
+            val textY = cy - (textPaint.descent() + textPaint.ascent()) / 2
+            canvas.drawText(label, cx, textY, textPaint)
+        }
     }
 }
