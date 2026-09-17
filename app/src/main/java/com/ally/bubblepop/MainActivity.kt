@@ -35,10 +35,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private var bubblesPopped = 0
     private var roundInProgress = false
 
-    private var unlockStep = 0
     private lateinit var unlockDot: View
+    private var unlockStep = 0
     private var lastTapTime = 0L
-    private val tapTimeout = 2000L
+    private val tapTimeout = 2500L
     private val unlockPositions = listOf(
         Gravity.TOP or Gravity.START,
         Gravity.TOP or Gravity.END,
@@ -110,39 +110,59 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private fun setupUnlockDot() {
         unlockDot = View(this)
         unlockDot.setBackgroundColor(Color.argb(60, 255, 255, 255))
-        val size = dpToPx(18)
-        val params = FrameLayout.LayoutParams(size, size)
-        params.gravity = unlockPositions[0]
-        params.setMargins(12, 12, 12, 12)
-        root.addView(unlockDot, params)
+        val dotSize = dpToPx(18)
+        val dotParams = FrameLayout.LayoutParams(dotSize, dotSize)
+        dotParams.gravity = unlockPositions[0]
+        dotParams.setMargins(12, 12, 12, 12)
+        root.addView(unlockDot, dotParams)
 
-        unlockDot.setOnClickListener {
-            val now = System.currentTimeMillis()
+        val cornerSteps = listOf(
+            Pair(Gravity.TOP or Gravity.START, 0),
+            Pair(Gravity.TOP or Gravity.END, 1),
+            Pair(Gravity.BOTTOM or Gravity.END, 2),
+            Pair(Gravity.BOTTOM or Gravity.START, 3)
+        )
 
-            if (now - lastTapTime > tapTimeout && unlockStep > 0) {
-                unlockStep = 0
-                val lp = unlockDot.layoutParams as FrameLayout.LayoutParams
-                lp.gravity = unlockPositions[0]
-                unlockDot.layoutParams = lp
+        cornerSteps.forEach { (gravity, requiredStep) ->
+            val zone = View(this)
+            val zoneSize = dpToPx(80)
+            val zp = FrameLayout.LayoutParams(zoneSize, zoneSize)
+            zp.gravity = gravity
+            root.addView(zone, zp)
+
+            zone.setOnClickListener {
+                val now = System.currentTimeMillis()
+
+                if (now - lastTapTime > tapTimeout && unlockStep > 0) {
+                    unlockStep = 0
+                    moveDot(0)
+                    lastTapTime = now
+                    return@setOnClickListener
+                }
+
                 lastTapTime = now
-                return@setOnClickListener
-            }
 
-            lastTapTime = now
-            unlockStep++
-
-            if (unlockStep >= unlockPositions.size) {
-                unlockStep = 0
-                val lp = unlockDot.layoutParams as FrameLayout.LayoutParams
-                lp.gravity = unlockPositions[0]
-                unlockDot.layoutParams = lp
-                showRestartScreen(fromUnlock = true)
-            } else {
-                val lp = unlockDot.layoutParams as FrameLayout.LayoutParams
-                lp.gravity = unlockPositions[unlockStep]
-                unlockDot.layoutParams = lp
+                if (requiredStep == unlockStep) {
+                    unlockStep++
+                    if (unlockStep >= 4) {
+                        unlockStep = 0
+                        moveDot(0)
+                        showRestartScreen(fromUnlock = true)
+                    } else {
+                        moveDot(unlockStep)
+                    }
+                } else {
+                    unlockStep = 0
+                    moveDot(0)
+                }
             }
         }
+    }
+
+    private fun moveDot(step: Int) {
+        val lp = unlockDot.layoutParams as FrameLayout.LayoutParams
+        lp.gravity = unlockPositions[step]
+        unlockDot.layoutParams = lp
     }
 
     private fun dpToPx(dp: Int): Int = (dp * resources.displayMetrics.density).toInt()
@@ -174,8 +194,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
                 val label = when (currentRound) {
                     RoundType.NUMBER -> (i + 1).toString()
-                    RoundType.COLOUR -> colorNames[colorIdx][0].toString()
-                    RoundType.PLAIN -> ""
+                    else -> ""
                 }
 
                 val bubble = BubbleView(
@@ -183,7 +202,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     bubbleColors[colorIdx][0],
                     bubbleColors[colorIdx][1],
                     label,
-                    currentRound != RoundType.PLAIN
+                    currentRound == RoundType.NUMBER
                 )
 
                 val lp = FrameLayout.LayoutParams(size, size)
@@ -269,7 +288,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     showRestartScreen(fromUnlock = false)
                     return
                 }
-                roundSpeed += 0.15f
+                roundSpeed += 0.4f
                 RoundType.PLAIN
             }
         }
